@@ -1,0 +1,20 @@
+# Control de versiones: el historial de git no hace falta en la imagen.
+.git/
+.gitignore
+
+# Secretos: el .env NUNCA debe quedar dentro de la imagen (las variables las pasa docker-compose).
+.env
+
+# Entorno virtual y ficheros generados por Python: se recrean dentro del contenedor.
+.venv/
+__pycache__/
+*.pyc
+
+# Ficheros de Docker: la imagen no necesita saber cómo se construyó.
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Documentación: no forma parte de la aplicación.
+docs/
+README.md

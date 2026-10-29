@@ -1,53 +1,36 @@
-# Despliegue completo: la app Flask + PostgreSQL en un contenedor.
-# Las variables ${...} se leen del fichero .env (copia de .env.example):
-#   ${VAR:-valor}   -> usa VAR; si no está definida, usa "valor" por defecto.
-#   ${VAR:?mensaje} -> VAR es obligatoria; si falta, Compose se detiene y muestra el mensaje.
+# Despliegue de la biblioteca: UN contenedor (la app Flask) en la EC2,
+# conectado a una base de datos PostgreSQL en Amazon RDS (fuera de Docker).
+#
+# ¿Por qué no hay contenedor de PostgreSQL? Porque RDS lo gestiona AWS:
+# copias de seguridad, actualizaciones y disponibilidad. Además, los datos
+# no dependen de la EC2: si la EC2 se borra, la base de datos sigue intacta.
+#
+# Requisitos previos en AWS:
+#   - RDS PostgreSQL creada, con la base de datos "biblioteca".
+#   - Grupo de seguridad de RDS: entrada 5432 SOLO desde el grupo de seguridad de la EC2.
+#   - Acceso público de RDS = No.
+#
+# Uso (en la EC2, dentro de esta carpeta):
+#   cp .env.example .env      # y edita .env con tus valores reales
+#   docker compose up -d --build
 services:
 
-  # Base de datos PostgreSQL.
-  db:
-    image: postgres:16-alpine
-    # Se reinicia sola si falla o si se reinicia la máquina (salvo que la pares tú).
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-biblioteca}
-      POSTGRES_USER: ${POSTGRES_USER:-biblioteca}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}
-    # Volumen: carpeta gestionada por Docker donde Postgres guarda los datos.
-    # Sin él, los datos se perderían al borrar el contenedor.
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    # Healthcheck: comprueba cada 5 s si Postgres ya acepta conexiones.
-    # Así "app" espera a que la base de datos esté lista (ver depends_on).
-    # Se escribe $$ para que sea el contenedor quien lea la variable, no Compose.
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    # Nota: db NO publica puertos (no hay "ports"). Solo "app" puede llegar a ella
-    # por la red interna de Compose, usando el nombre del servicio como host ("db").
-    # Así la base de datos no queda expuesta a Internet.
-
-  # Aplicación Flask (se construye con el Dockerfile de esta carpeta).
   app:
+    # Construye la imagen con el Dockerfile de esta carpeta.
     build: .
+    # Si el contenedor falla o se reinicia la EC2, vuelve a arrancar solo
+    # (salvo que lo pares tú con "docker compose down").
     restart: unless-stopped
-    # Solo escucha en 127.0.0.1 de la EC2: no es accesible desde Internet.
-    # Para verla desde tu PC, abre un túnel SSH:
-    #   ssh -L 5000:localhost:5000 usuario@IP-de-la-EC2
+    # 127.0.0.1 hace que el puerto solo sea accesible desde la propia EC2,
+    # no desde Internet. Para ver la web desde tu PC, abre un túnel SSH:
+    #   ssh -i labsuser.pem -L 5000:localhost:5000 ubuntu@IP-DE-LA-EC2
     # y visita http://localhost:5000
     ports:
       - "127.0.0.1:5000:5000"
+    # Estas variables las inyecta Compose al ARRANCAR el contenedor, leyéndolas
+    # del fichero .env; NO están dentro de la imagen (así no se filtran secretos).
+    # ${VAR:?mensaje} significa "VAR es obligatoria": si falta en .env,
+    # Compose se detiene y muestra el mensaje.
     environment:
-      # Cadena de conexión a Postgres; el host es "db" (nombre del servicio de arriba).
-      DATABASE_URL: postgresql://${POSTGRES_USER:-biblioteca}:${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:-biblioteca}
+      DATABASE_URL: ${DATABASE_URL:?Define DATABASE_URL (conexión a RDS) en .env}
       SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env}
-    # No arranca hasta que el healthcheck de db diga que está lista.
-    depends_on:
-      db:
-        condition: service_healthy
-
-# Declaración del volumen usado por db.
-volumes:
-  postgres_data:

@@ -32,7 +32,10 @@ def conectar():
             "Falta la variable de entorno DATABASE_URL. "
             "Ejemplo: postgresql://usuario:contraseña@localhost:5432/biblioteca"
         )
-    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+    # Si la base de datos no responde (por ejemplo, un grupo de seguridad mal configurado),
+    # nos rendimos a los 5 s: así el error queda en el log y se ve la página amable,
+    # en lugar de que gunicorn corte la petición a los 30 s.
+    conn = psycopg.connect(DATABASE_URL, row_factory=dict_row, connect_timeout=5)
     # La tabla se crea la primera vez que nos conectamos (y no en el bloque main),
     # así funciona con `python app.py` y con cualquier servidor que importe el módulo.
     if not tabla_creada:

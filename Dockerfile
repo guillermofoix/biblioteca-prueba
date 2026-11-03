@@ -27,4 +27,5 @@ EXPOSE 5000
 # Arranca la app con gunicorn (servidor de producción).
 # 0.0.0.0 = escuchar en todas las interfaces; con 127.0.0.1 no se podría acceder desde fuera del contenedor.
 # app:app = fichero app.py (módulo "app") y variable "app" (la aplicación Flask) dentro de él.
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+# --access-logfile -: así cada petición (GET / 200) aparece en "docker compose logs".
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "app:app"]
